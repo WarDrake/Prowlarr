@@ -8,7 +8,7 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Http;
-using NzbDrone.Core.Indexers.Cardigann;
+using NzbDrone.Core.Indexers.Definitions.Cardigann;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
@@ -29,7 +29,7 @@ namespace NzbDrone.Core.IndexerVersions
         /* Update Service will fall back if version # does not exist for an indexer  per Ta */
 
         private const string DEFINITION_BRANCH = "master";
-        private const int DEFINITION_VERSION = 8;
+        private const int DEFINITION_VERSION = 9;
 
         // Used when moving yml to C#
         private readonly List<string> _definitionBlocklist = new ()
@@ -293,7 +293,7 @@ namespace NzbDrone.Core.IndexerVersions
 
                 _httpClient.DownloadFile($"https://indexers.prowlarr.com/{DEFINITION_BRANCH}/{DEFINITION_VERSION}/package.zip", saveFile);
 
-                using (ZipArchive archive = ZipFile.OpenRead(saveFile))
+                using (var archive = ZipFile.OpenRead(saveFile))
                 {
                     archive.ExtractToDirectory(definitionsFolder, true);
                 }

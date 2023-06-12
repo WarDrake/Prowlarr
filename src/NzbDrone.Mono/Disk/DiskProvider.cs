@@ -40,7 +40,7 @@ namespace NzbDrone.Mono.Disk
 
         public override long? GetAvailableSpace(string path)
         {
-            Ensure.That(path, () => path).IsValidPath();
+            Ensure.That(path, () => path).IsValidPath(PathValidationType.CurrentOs);
 
             var mount = GetMount(path);
 
@@ -168,14 +168,40 @@ namespace NzbDrone.Mono.Disk
 
         protected override List<IMount> GetAllMounts()
         {
-            return _procMountProvider.GetMounts()
-                                     .Concat(GetDriveInfoMounts()
-                                                 .Select(d => new DriveInfoMount(d, FindDriveType.Find(d.DriveFormat)))
-                                                 .Where(d => d.DriveType == DriveType.Fixed ||
-                                                             d.DriveType == DriveType.Network ||
-                                                             d.DriveType == DriveType.Removable))
-                                     .DistinctBy(v => v.RootDirectory)
-                                     .ToList();
+            var mounts = new List<IMount>();
+
+            try
+            {
+                mounts.AddRange(_procMountProvider.GetMounts());
+            }
+            catch (Exception e)
+            {
+                _logger.Warn(e, $"Unable to get mounts: {e.Message}");
+            }
+
+            try
+            {
+                mounts.AddRange(GetDriveInfoMounts()
+                    .Select(d =>
+                    {
+                        try
+                        {
+                            return new DriveInfoMount(d, FindDriveType.Find(d.DriveFormat));
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception($"Failed to fetch drive info for mount point: {d.Name}", ex);
+                        }
+                    })
+                    .Where(d => d.DriveType is DriveType.Fixed or DriveType.Network or DriveType.Removable));
+            }
+            catch (Exception e)
+            {
+                _logger.Warn(e, $"Unable to get drive mounts: {e.Message}");
+            }
+
+            return mounts.DistinctBy(v => v.RootDirectory)
+                         .ToList();
         }
 
         protected override bool IsSpecialMount(IMount mount)
@@ -199,7 +225,7 @@ namespace NzbDrone.Mono.Disk
 
         public override long? GetTotalSize(string path)
         {
-            Ensure.That(path, () => path).IsValidPath();
+            Ensure.That(path, () => path).IsValidPath(PathValidationType.CurrentOs);
 
             var mount = GetMount(path);
 
@@ -448,9 +474,7 @@ namespace NzbDrone.Mono.Disk
                 return UNCHANGED_ID;
             }
 
-            uint userId;
-
-            if (uint.TryParse(user, out userId))
+            if (uint.TryParse(user, out var userId))
             {
                 return userId;
             }
@@ -472,9 +496,7 @@ namespace NzbDrone.Mono.Disk
                 return UNCHANGED_ID;
             }
 
-            uint groupId;
-
-            if (uint.TryParse(group, out groupId))
+            if (uint.TryParse(group, out var groupId))
             {
                 return groupId;
             }

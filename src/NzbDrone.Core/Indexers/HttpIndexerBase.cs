@@ -33,6 +33,7 @@ namespace NzbDrone.Core.Indexers
         public override bool SupportsRss => true;
         public override bool SupportsSearch => true;
         public override bool SupportsRedirect => false;
+        public override bool SupportsPagination => false;
 
         public override Encoding Encoding => Encoding.UTF8;
         public override string Language => "en-US";
@@ -55,7 +56,12 @@ namespace NzbDrone.Core.Indexers
 
         public override Task<IndexerPageableQueryResult> Fetch(MovieSearchCriteria searchCriteria)
         {
-            if (!SupportsSearch)
+            if (!SupportsSearch && !SupportsRss)
+            {
+                return Task.FromResult(new IndexerPageableQueryResult());
+            }
+
+            if (!SupportsPagination && searchCriteria.Offset is > 0)
             {
                 return Task.FromResult(new IndexerPageableQueryResult());
             }
@@ -65,7 +71,12 @@ namespace NzbDrone.Core.Indexers
 
         public override Task<IndexerPageableQueryResult> Fetch(MusicSearchCriteria searchCriteria)
         {
-            if (!SupportsSearch)
+            if (!SupportsSearch && !SupportsRss)
+            {
+                return Task.FromResult(new IndexerPageableQueryResult());
+            }
+
+            if (!SupportsPagination && searchCriteria.Offset is > 0)
             {
                 return Task.FromResult(new IndexerPageableQueryResult());
             }
@@ -75,7 +86,12 @@ namespace NzbDrone.Core.Indexers
 
         public override Task<IndexerPageableQueryResult> Fetch(TvSearchCriteria searchCriteria)
         {
-            if (!SupportsSearch)
+            if (!SupportsSearch && !SupportsRss)
+            {
+                return Task.FromResult(new IndexerPageableQueryResult());
+            }
+
+            if (!SupportsPagination && searchCriteria.Offset is > 0)
             {
                 return Task.FromResult(new IndexerPageableQueryResult());
             }
@@ -85,7 +101,12 @@ namespace NzbDrone.Core.Indexers
 
         public override Task<IndexerPageableQueryResult> Fetch(BookSearchCriteria searchCriteria)
         {
-            if (!SupportsSearch)
+            if (!SupportsSearch && !SupportsRss)
+            {
+                return Task.FromResult(new IndexerPageableQueryResult());
+            }
+
+            if (!SupportsPagination && searchCriteria.Offset is > 0)
             {
                 return Task.FromResult(new IndexerPageableQueryResult());
             }
@@ -95,7 +116,12 @@ namespace NzbDrone.Core.Indexers
 
         public override Task<IndexerPageableQueryResult> Fetch(BasicSearchCriteria searchCriteria)
         {
-            if (!SupportsSearch)
+            if (!SupportsSearch && !SupportsRss)
+            {
+                return Task.FromResult(new IndexerPageableQueryResult());
+            }
+
+            if (!SupportsPagination && searchCriteria.Offset is > 0)
             {
                 return Task.FromResult(new IndexerPageableQueryResult());
             }
@@ -250,7 +276,7 @@ namespace NzbDrone.Core.Indexers
 
                 var pageableRequestChain = pageableRequestChainSelector(generator);
 
-                for (int i = 0; i < pageableRequestChain.Tiers; i++)
+                for (var i = 0; i < pageableRequestChain.Tiers; i++)
                 {
                     var pageableRequests = pageableRequestChain.GetTier(i);
 
@@ -392,7 +418,7 @@ namespace NzbDrone.Core.Indexers
 
                 if (releases.Count == 0)
                 {
-                    _logger.Trace(response.Content);
+                    _logger.Trace("No releases found. Response: {0}", response.Content);
                 }
 
                 return new IndexerQueryResult
@@ -482,9 +508,12 @@ namespace NzbDrone.Core.Indexers
             }
 
             // Throw common http errors here before we try to parse
-            if (response.HasHttpError)
+            if (response.HasHttpError && (request.HttpRequest.SuppressHttpErrorStatusCodes == null || !request.HttpRequest.SuppressHttpErrorStatusCodes.Contains(response.StatusCode)))
             {
-                _logger.Warn("HTTP Error - {0}", response);
+                if (response.Request.LogHttpError)
+                {
+                    _logger.Warn("HTTP Error - {0}", response);
+                }
 
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
@@ -618,7 +647,7 @@ namespace NzbDrone.Core.Indexers
             {
                 _logger.Warn(ex, "Unable to connect to indexer");
 
-                return new ValidationFailure(string.Empty, "Unable to connect to indexer, check the log above the ValidationFailure for more details");
+                return new ValidationFailure(string.Empty, "Unable to connect to indexer, check the log above the ValidationFailure for more details. " + ex.Message);
             }
 
             return null;

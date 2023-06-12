@@ -1,15 +1,14 @@
 using System;
 using NLog;
-using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Messaging.Events;
 
-namespace NzbDrone.Core.Indexers.TorrentPotato
+namespace NzbDrone.Core.Indexers.Definitions.TorrentPotato
 {
     public class TorrentPotato : TorrentIndexerBase<TorrentPotatoSettings>
     {
         public override string Name => "TorrentPotato";
-        public override string[] IndexerUrls => new string[] { "http://127.0.0.1" };
+        public override string[] IndexerUrls => new[] { "http://127.0.0.1" };
         public override string Description => "A JSON based torrent provider previously developed for CouchPotato";
 
         public override DownloadProtocol Protocol => DownloadProtocol.Torrent;
@@ -32,7 +31,8 @@ namespace NzbDrone.Core.Indexers.TorrentPotato
                 Protocol = DownloadProtocol.Torrent,
                 SupportsRss = SupportsRss,
                 SupportsSearch = SupportsSearch,
-                SupportsRedirect = SupportsRedirect
+                SupportsRedirect = SupportsRedirect,
+                SupportsPagination = SupportsPagination
             };
         }
 

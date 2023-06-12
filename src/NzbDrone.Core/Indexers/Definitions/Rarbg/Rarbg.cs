@@ -1,22 +1,26 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 using System.Web;
 using NLog;
+using NzbDrone.Common;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
+using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
-using NzbDrone.Core.Indexers.Exceptions;
+using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser;
+using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Validation;
 
 namespace NzbDrone.Core.Indexers.Definitions.Rarbg
 {
+    [Obsolete("Rarbg has shutdown 2023-05-31")]
     public class Rarbg : TorrentIndexerBase<RarbgSettings>
     {
         public override string Name => "Rarbg";
@@ -28,11 +32,13 @@ namespace NzbDrone.Core.Indexers.Definitions.Rarbg
         public override IndexerCapabilities Capabilities => SetCapabilities();
         public override TimeSpan RateLimit => TimeSpan.FromSeconds(7);
         private readonly IRarbgTokenProvider _tokenProvider;
+        private readonly ICached<IndexerQueryResult> _queryResultCache;
 
-        public Rarbg(IRarbgTokenProvider tokenProvider, IIndexerHttpClient httpClient, IEventAggregator eventAggregator, IIndexerStatusService indexerStatusService, IConfigService configService, Logger logger)
+        public Rarbg(IRarbgTokenProvider tokenProvider, IIndexerHttpClient httpClient, IEventAggregator eventAggregator, IIndexerStatusService indexerStatusService, IConfigService configService, Logger logger, ICacheManager cacheManager)
             : base(httpClient, eventAggregator, indexerStatusService, configService, logger)
         {
             _tokenProvider = tokenProvider;
+            _queryResultCache = cacheManager.GetCache<IndexerQueryResult>(GetType(), "QueryResults");
         }
 
         public override IIndexerRequestGenerator GetRequestGenerator()
@@ -45,21 +51,36 @@ namespace NzbDrone.Core.Indexers.Definitions.Rarbg
             return new RarbgParser(Capabilities, _logger);
         }
 
-        public static void CheckResponseByStatusCode(IndexerResponse response)
+        protected string BuildQueryResultCacheKey(IndexerRequest request)
         {
-            var responseCode = (int)response.HttpResponse.StatusCode;
+            return $"{request.HttpRequest.Url.FullUri}.{HashUtil.ComputeSha256Hash(Settings.ToJson())}";
+        }
 
-            switch (responseCode)
+        protected override async Task<IndexerQueryResult> FetchPage(IndexerRequest request, IParseIndexerResponse parser)
+        {
+            var cacheKey = BuildQueryResultCacheKey(request);
+            var queryResult = _queryResultCache.Find(cacheKey);
+
+            if (queryResult != null)
             {
-                case (int)HttpStatusCode.TooManyRequests:
-                    throw new TooManyRequestsException(response.HttpRequest, response.HttpResponse, TimeSpan.FromMinutes(2));
-                case 520:
-                    throw new TooManyRequestsException(response.HttpRequest, response.HttpResponse, TimeSpan.FromMinutes(3));
-                case (int)HttpStatusCode.OK:
-                    break;
-                default:
-                    throw new IndexerException(response, "Indexer API call returned an unexpected StatusCode [{0}]", responseCode);
+                queryResult.Cached = true;
+
+                return queryResult;
             }
+
+            _queryResultCache.ClearExpired();
+
+            queryResult = await base.FetchPage(request, parser);
+            _queryResultCache.Set(cacheKey, queryResult, TimeSpan.FromMinutes(10));
+
+            return queryResult;
+        }
+
+        protected override IList<ReleaseInfo> CleanupReleases(IEnumerable<ReleaseInfo> releases, SearchCriteriaBase searchCriteria)
+        {
+            var cleanReleases = base.CleanupReleases(releases, searchCriteria);
+
+            return cleanReleases.Select(r => (ReleaseInfo)r.Clone()).ToList();
         }
 
         private IndexerCapabilities SetCapabilities()
@@ -112,11 +133,11 @@ namespace NzbDrone.Core.Indexers.Definitions.Rarbg
             return caps;
         }
 
-        protected override async Task<IndexerQueryResult> FetchPage(IndexerRequest request, IParseIndexerResponse parser)
+        protected override async Task<IndexerResponse> FetchIndexerResponse(IndexerRequest request)
         {
-            var response = await FetchIndexerResponse(request);
+            var response = await base.FetchIndexerResponse(request);
 
-            CheckResponseByStatusCode(response);
+            ((RarbgParser)GetParser()).CheckResponseByStatusCode(response);
 
             // try and recover from token errors
             var jsonResponse = new HttpResponse<RarbgResponse>(response.HttpResponse);
@@ -133,36 +154,19 @@ namespace NzbDrone.Core.Indexers.Definitions.Rarbg
                     qs.Set("token", newToken);
 
                     request.HttpRequest.Url = request.Url.SetQuery(qs.GetQueryString());
-                    response = await FetchIndexerResponse(request);
+
+                    return await FetchIndexerResponse(request);
                 }
-                else if (jsonResponse.Resource.error_code is 5)
+
+                if (jsonResponse.Resource.error_code is 5)
                 {
                     _logger.Debug("Rarbg temp rate limit hit, retrying request");
-                    response = await FetchIndexerResponse(request);
+
+                    return await FetchIndexerResponse(request);
                 }
             }
 
-            try
-            {
-                var releases = parser.ParseResponse(response).ToList();
-
-                if (releases.Count == 0)
-                {
-                    _logger.Trace(response.Content);
-                }
-
-                return new IndexerQueryResult
-                {
-                    Releases = releases,
-                    Response = response.HttpResponse
-                };
-            }
-            catch (Exception ex)
-            {
-                ex.WithData(response.HttpResponse, 128 * 1024);
-                _logger.Trace("Unexpected Response content ({0} bytes): {1}", response.HttpResponse.ResponseData.Length, response.HttpResponse.Content);
-                throw;
-            }
+            return response;
         }
 
         public override object RequestAction(string action, IDictionary<string, string> query)

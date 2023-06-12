@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { SelectActionType, useSelect } from 'App/SelectContext';
+import { useSelect } from 'App/SelectContext';
 import Label from 'Components/Label';
 import IconButton from 'Components/Link/IconButton';
 import RelativeDateCellConnector from 'Components/Table/Cells/RelativeDateCellConnector';
@@ -55,7 +55,11 @@ function IndexerIndexRow(props: IndexerIndexRowProps) {
   const vipExpiration =
     fields.find((field) => field.name === 'vipExpiration')?.value ?? '';
 
-  const rssUrl = `${window.location.origin}${window.Prowlarr.urlBase}/${id}/api?t=search&extended=1&apikey=${window.Prowlarr.apiKey}`;
+  const rssUrl = `${window.location.origin}${
+    window.Prowlarr.urlBase
+  }/${id}/api?apikey=${encodeURIComponent(
+    window.Prowlarr.apiKey
+  )}&extended=1&t=search`;
 
   const [isEditIndexerModalOpen, setIsEditIndexerModalOpen] = useState(false);
   const [isDeleteIndexerModalOpen, setIsDeleteIndexerModalOpen] =
@@ -86,7 +90,7 @@ function IndexerIndexRow(props: IndexerIndexRowProps) {
   const onSelectedChange = useCallback(
     ({ id, value, shiftKey }) => {
       selectDispatch({
-        type: SelectActionType.ToggleSelected,
+        type: 'toggleSelected',
         id,
         isSelected: value,
         shiftKey,

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.AspNetCore.Routing.Constraints;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
@@ -44,14 +43,14 @@ namespace Prowlarr.Api.V1.Search
         {
             get
             {
-                var extension = "torrent";
-
-                if (Protocol == DownloadProtocol.Usenet)
+                var extension = Protocol switch
                 {
-                    extension = "nzb";
-                }
+                    DownloadProtocol.Torrent => ".torrent",
+                    DownloadProtocol.Usenet => ".nzb",
+                    _ => string.Empty
+                };
 
-                return $"{Title}.{extension}";
+                return $"{Title}{extension}";
             }
         }
     }

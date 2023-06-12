@@ -51,7 +51,7 @@ namespace Prowlarr.Api.V1.Config
             SharedValidator.RuleFor(c => c.SslPort).NotEqual(c => c.Port).When(c => c.EnableSsl);
 
             SharedValidator.RuleFor(c => c.SslCertPath)
-                .Cascade(CascadeMode.StopOnFirstFailure)
+                .Cascade(CascadeMode.Stop)
                 .NotEmpty()
                 .IsValidPath()
                 .SetValidator(fileExistsValidator)
@@ -87,6 +87,7 @@ namespace Prowlarr.Api.V1.Config
         }
 
         [HttpGet]
+        [Produces("application/json")]
         public HostConfigResource GetHostConfig()
         {
             var resource = HostConfigResourceMapper.ToResource(_configFileProvider, _configService);
@@ -103,6 +104,8 @@ namespace Prowlarr.Api.V1.Config
         }
 
         [RestPutById]
+        [Consumes("application/json")]
+        [Produces("application/json")]
         public ActionResult<HostConfigResource> SaveHostConfig(HostConfigResource resource)
         {
             var dictionary = resource.GetType()

@@ -3,6 +3,7 @@ import React, { Component } from 'react';
 import Card from 'Components/Card';
 import Label from 'Components/Label';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
+import TagList from 'Components/TagList';
 import { kinds } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
 import EditNotificationModalConnector from './EditNotificationModalConnector';
@@ -57,10 +58,14 @@ class Notification extends Component {
       name,
       onGrab,
       onHealthIssue,
+      onHealthRestored,
       onApplicationUpdate,
       supportsOnGrab,
       supportsOnHealthIssue,
-      supportsOnApplicationUpdate
+      supportsOnHealthRestored,
+      supportsOnApplicationUpdate,
+      tags,
+      tagList
     } = this.props;
 
     return (
@@ -74,17 +79,27 @@ class Notification extends Component {
         </div>
 
         {
-          supportsOnGrab && onGrab &&
+          supportsOnGrab && onGrab ?
             <Label kind={kinds.SUCCESS}>
               {translate('OnGrab')}
-            </Label>
+            </Label> :
+            null
         }
 
         {
-          supportsOnHealthIssue && onHealthIssue &&
+          supportsOnHealthIssue && onHealthIssue ?
             <Label kind={kinds.SUCCESS}>
               {translate('OnHealthIssue')}
-            </Label>
+            </Label> :
+            null
+        }
+
+        {
+          supportsOnHealthRestored && onHealthRestored ?
+            <Label kind={kinds.SUCCESS}>
+              {translate('OnHealthRestored')}
+            </Label> :
+            null
         }
 
         {
@@ -96,7 +111,7 @@ class Notification extends Component {
         }
 
         {
-          !onGrab && !onHealthIssue && !onApplicationUpdate ?
+          !onGrab && !onHealthIssue && !onHealthRestored && !onApplicationUpdate ?
             <Label
               kind={kinds.DISABLED}
               outline={true}
@@ -105,6 +120,11 @@ class Notification extends Component {
             </Label> :
             null
         }
+
+        <TagList
+          tags={tags}
+          tagList={tagList}
+        />
 
         <EditNotificationModalConnector
           id={id}
@@ -132,10 +152,14 @@ Notification.propTypes = {
   name: PropTypes.string.isRequired,
   onGrab: PropTypes.bool.isRequired,
   onHealthIssue: PropTypes.bool.isRequired,
+  onHealthRestored: PropTypes.bool.isRequired,
   onApplicationUpdate: PropTypes.bool.isRequired,
   supportsOnGrab: PropTypes.bool.isRequired,
   supportsOnHealthIssue: PropTypes.bool.isRequired,
+  supportsOnHealthRestored: PropTypes.bool.isRequired,
   supportsOnApplicationUpdate: PropTypes.bool.isRequired,
+  tags: PropTypes.arrayOf(PropTypes.number).isRequired,
+  tagList: PropTypes.arrayOf(PropTypes.object).isRequired,
   onConfirmDeleteNotification: PropTypes.func.isRequired
 };
 

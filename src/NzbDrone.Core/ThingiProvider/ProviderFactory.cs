@@ -98,9 +98,10 @@ namespace NzbDrone.Core.ThingiProvider
 
         public virtual TProviderDefinition Create(TProviderDefinition definition)
         {
-            var addedDefinition = _providerRepository.Insert(definition);
-            _eventAggregator.PublishEvent(new ProviderAddedEvent<TProvider>(definition));
-            return addedDefinition;
+            var result = _providerRepository.Insert(definition);
+            _eventAggregator.PublishEvent(new ProviderAddedEvent<TProvider>(result));
+
+            return result;
         }
 
         public virtual void Update(TProviderDefinition definition)
@@ -177,7 +178,7 @@ namespace NzbDrone.Core.ThingiProvider
 
             foreach (var invalidDefinition in storedProvider.Where(def => GetImplementation(def) == null))
             {
-                _logger.Debug("Removing {0} ", invalidDefinition.Name);
+                _logger.Warn("Removing {0}", invalidDefinition.Name);
                 _providerRepository.Delete(invalidDefinition);
             }
         }

@@ -36,6 +36,11 @@ namespace NzbDrone.Core.Notifications.Email
             SendEmail(Settings, HEALTH_ISSUE_TITLE_BRANDED, message.Message);
         }
 
+        public override void OnHealthRestored(HealthCheck.HealthCheck previousMessage)
+        {
+            SendEmail(Settings, HEALTH_RESTORED_TITLE_BRANDED, $"The following issue is now resolved: {previousMessage.Message}");
+        }
+
         public override void OnApplicationUpdate(ApplicationUpdateMessage updateMessage)
         {
             var body = $"{updateMessage.Message}";
@@ -75,7 +80,7 @@ namespace NzbDrone.Core.Notifications.Email
 
             email.From.Add(ParseAddress("From", settings.From));
             email.To.AddRange(settings.To.Select(x => ParseAddress("To", x)));
-            email.Cc.AddRange(settings.CC.Select(x => ParseAddress("CC", x)));
+            email.Cc.AddRange(settings.Cc.Select(x => ParseAddress("CC", x)));
             email.Bcc.AddRange(settings.Bcc.Select(x => ParseAddress("BCC", x)));
 
             email.Subject = subject;

@@ -58,8 +58,6 @@ namespace NzbDrone.Core.Download
                 throw new DownloadClientUnavailableException($"{release.DownloadProtocol} Download client isn't configured yet");
             }
 
-            // Get the seed configuration for this release.
-            // remoteMovie.SeedConfiguration = _seedConfigProvider.GetSeedConfiguration(remoteMovie);
             var indexer = _indexerFactory.GetInstance(_indexerFactory.Get(release.IndexerId));
 
             var grabEvent = new IndexerDownloadEvent(release, true, source, host, release.Title, release.DownloadUrl)

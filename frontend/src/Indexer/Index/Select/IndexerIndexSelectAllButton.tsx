@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
-import { SelectActionType, useSelect } from 'App/SelectContext';
+import { useSelect } from 'App/SelectContext';
 import PageToolbarButton from 'Components/Page/Toolbar/PageToolbarButton';
 import { icons } from 'Helpers/Props';
+import translate from 'Utilities/String/translate';
 
 interface IndexerIndexSelectAllButtonProps {
   label: string;
@@ -24,15 +25,13 @@ function IndexerIndexSelectAllButton(props: IndexerIndexSelectAllButtonProps) {
 
   const onPress = useCallback(() => {
     selectDispatch({
-      type: allSelected
-        ? SelectActionType.UnselectAll
-        : SelectActionType.SelectAll,
+      type: allSelected ? 'unselectAll' : 'selectAll',
     });
   }, [allSelected, selectDispatch]);
 
   return isSelectMode ? (
     <PageToolbarButton
-      label={allSelected ? 'Unselect All' : 'Select All'}
+      label={allSelected ? translate('UnselectAll') : translate('SelectAll')}
       iconName={icon}
       onPress={onPress}
     />

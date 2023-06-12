@@ -73,10 +73,6 @@ namespace NzbDrone.Core.Indexers.Definitions
         public BeyondHDSettings Settings { get; set; }
         public IndexerCapabilities Capabilities { get; set; }
 
-        public BeyondHDRequestGenerator()
-        {
-        }
-
         private IEnumerable<IndexerRequest> GetPagedRequests(string term, int[] categories, string imdbId = null, int tmdbId = 0)
         {
             var body = new Dictionary<string, object>
@@ -186,12 +182,12 @@ namespace NzbDrone.Core.Indexers.Definitions
             var indexerHttpResponse = indexerResponse.HttpResponse;
             if (indexerHttpResponse.StatusCode != HttpStatusCode.OK)
             {
-                throw new IndexerException(indexerResponse, $"Unexpected response status {indexerHttpResponse.StatusCode} code from API request");
+                throw new IndexerException(indexerResponse, $"Unexpected response status {indexerHttpResponse.StatusCode} code from indexer request");
             }
 
             if (!indexerHttpResponse.Headers.ContentType.Contains(HttpAccept.Json.Value))
             {
-                throw new IndexerException(indexerResponse, $"Unexpected response header {indexerHttpResponse.Headers.ContentType} from API request, expected {HttpAccept.Json.Value}");
+                throw new IndexerException(indexerResponse, $"Unexpected response header {indexerHttpResponse.Headers.ContentType} from indexer request, expected {HttpAccept.Json.Value}");
             }
 
             if (indexerResponse.Content.ContainsIgnoreCase("Invalid API Key"))
@@ -213,7 +209,7 @@ namespace NzbDrone.Core.Indexers.Definitions
 
                 // BHD can return crazy values for tmdb
                 var tmdbId = row.TmdbId.IsNullOrWhiteSpace() ? 0 : ParseUtil.TryCoerceInt(row.TmdbId.Split("/")[1], out var tmdbResult) ? tmdbResult : 0;
-                var imdbId = ParseUtil.GetImdbID(row.ImdbId).GetValueOrDefault();
+                var imdbId = ParseUtil.GetImdbId(row.ImdbId).GetValueOrDefault();
 
                 var release = new TorrentInfo
                 {
@@ -258,10 +254,6 @@ namespace NzbDrone.Core.Indexers.Definitions
     public class BeyondHDSettings : NoAuthTorrentBaseSettings
     {
         private static readonly BeyondHDSettingsValidator Validator = new ();
-
-        public BeyondHDSettings()
-        {
-        }
 
         [FieldDefinition(2, Label = "API Key", HelpText = "API Key from the Site (Found in My Security => API Key)", Privacy = PrivacyLevel.ApiKey)]
         public string ApiKey { get; set; }

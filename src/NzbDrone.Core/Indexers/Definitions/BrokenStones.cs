@@ -1,4 +1,3 @@
-using System;
 using NLog;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers.Definitions.Gazelle;
@@ -6,11 +5,10 @@ using NzbDrone.Core.Messaging.Events;
 
 namespace NzbDrone.Core.Indexers.Definitions;
 
-[Obsolete("Site unavailable")]
 public class BrokenStones : GazelleBase<GazelleSettings>
 {
     public override string Name => "BrokenStones";
-    public override string[] IndexerUrls => new[] { "https://brokenstones.club/" };
+    public override string[] IndexerUrls => new[] { "https://brokenstones.is/" };
     public override string Description => "Broken Stones is a Private site for MacOS and iOS APPS / GAMES";
     public override IndexerPrivacy Privacy => IndexerPrivacy.Private;
 

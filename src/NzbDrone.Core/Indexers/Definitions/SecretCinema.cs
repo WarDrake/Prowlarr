@@ -72,14 +72,14 @@ public class SecretCinemaParser : IParseIndexerResponse
 
     public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
     {
-        var torrentInfos = new List<ReleaseInfo>();
+        var releaseInfos = new List<ReleaseInfo>();
 
         if (indexerResponse.HttpResponse.StatusCode != HttpStatusCode.OK)
         {
             // Remove cookie cache
             CookiesUpdater(null, null);
 
-            throw new IndexerException(indexerResponse, $"Unexpected response status {indexerResponse.HttpResponse.StatusCode} code from API request");
+            throw new IndexerException(indexerResponse, $"Unexpected response status {indexerResponse.HttpResponse.StatusCode} code from indexer request");
         }
 
         if (!indexerResponse.HttpResponse.Headers.ContentType.Contains(HttpAccept.Json.Value))
@@ -87,7 +87,7 @@ public class SecretCinemaParser : IParseIndexerResponse
             // Remove cookie cache
             CookiesUpdater(null, null);
 
-            throw new IndexerException(indexerResponse, $"Unexpected response header {indexerResponse.HttpResponse.Headers.ContentType} from API request, expected {HttpAccept.Json.Value}");
+            throw new IndexerException(indexerResponse, $"Unexpected response header {indexerResponse.HttpResponse.Headers.ContentType} from indexer request, expected {HttpAccept.Json.Value}");
         }
 
         var jsonResponse = new HttpResponse<GazelleResponse>(indexerResponse.HttpResponse);
@@ -95,7 +95,7 @@ public class SecretCinemaParser : IParseIndexerResponse
             jsonResponse.Resource.Status.IsNullOrWhiteSpace() ||
             jsonResponse.Resource.Response == null)
         {
-            return torrentInfos;
+            return releaseInfos.ToArray();
         }
 
         foreach (var result in jsonResponse.Resource.Response.Results)
@@ -109,10 +109,11 @@ public class SecretCinemaParser : IParseIndexerResponse
                     // in SC movies, artist=director and GroupName=title
                     var artist = WebUtility.HtmlDecode(result.Artist);
                     var title = WebUtility.HtmlDecode(result.GroupName);
+                    var time = DateTime.SpecifyKind(torrent.Time, DateTimeKind.Unspecified);
 
                     var release = new GazelleInfo
                     {
-                        Guid = string.Format("SecretCinema-{0}", id),
+                        Guid = $"SecretCinema-{id}",
                         Title = title,
                         Container = torrent.Encoding,
                         Files = torrent.FileCount,
@@ -123,7 +124,7 @@ public class SecretCinemaParser : IParseIndexerResponse
                         InfoUrl = GetInfoUrl(result.GroupId, id),
                         Seeders = int.Parse(torrent.Seeders),
                         Peers = int.Parse(torrent.Leechers) + int.Parse(torrent.Seeders),
-                        PublishDate = torrent.Time.ToUniversalTime(),
+                        PublishDate = new DateTimeOffset(time, TimeSpan.FromHours(2)).UtcDateTime,
                         Scene = torrent.Scene,
                         DownloadVolumeFactor = torrent.IsFreeLeech || torrent.IsNeutralLeech || torrent.IsPersonalFreeLeech ? 0 : 1,
                         UploadVolumeFactor = torrent.IsNeutralLeech ? 0 : 1
@@ -162,7 +163,7 @@ public class SecretCinemaParser : IParseIndexerResponse
                         release.Title += " [Cue]";
                     }
 
-                    torrentInfos.Add(release);
+                    releaseInfos.Add(release);
                 }
             }
             else
@@ -172,7 +173,7 @@ public class SecretCinemaParser : IParseIndexerResponse
 
                 var release = new GazelleInfo
                 {
-                    Guid = string.Format("SecretCinema-{0}", id),
+                    Guid = $"SecretCinema-{id}",
                     Title = groupName,
                     Size = long.Parse(result.Size),
                     DownloadUrl = GetDownloadUrl(id),
@@ -196,13 +197,13 @@ public class SecretCinemaParser : IParseIndexerResponse
                     release.Categories = _capabilities.Categories.MapTrackerCatDescToNewznab(category);
                 }
 
-                torrentInfos.Add(release);
+                releaseInfos.Add(release);
             }
         }
 
         // order by date
         return
-            torrentInfos
+            releaseInfos
                 .OrderByDescending(o => o.PublishDate)
                 .ToArray();
     }
@@ -212,13 +213,17 @@ public class SecretCinemaParser : IParseIndexerResponse
         return category.Contains(NewznabStandardCategory.Movies) || NewznabStandardCategory.Movies.SubCategories.Any(subCat => category.Contains(subCat));
     }
 
-    protected virtual string GetDownloadUrl(int torrentId)
+    private string GetDownloadUrl(int torrentId)
     {
         var url = new HttpUri(_settings.BaseUrl)
             .CombinePath("/torrents.php")
             .AddQueryParam("action", "download")
-            .AddQueryParam("useToken", _settings.UseFreeleechToken ? "1" : "0")
             .AddQueryParam("id", torrentId);
+
+        if (_settings.UseFreeleechToken)
+        {
+            url = url.AddQueryParam("useToken", "1");
+        }
 
         return url.FullUri;
     }

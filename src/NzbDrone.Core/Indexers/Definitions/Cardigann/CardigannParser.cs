@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
-using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using AngleSharp.Xml.Parser;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Common.Extensions;
@@ -16,7 +16,7 @@ using NzbDrone.Core.Indexers.Exceptions;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
-namespace NzbDrone.Core.Indexers.Cardigann
+namespace NzbDrone.Core.Indexers.Definitions.Cardigann
 {
     public class CardigannParser : CardigannBase, IParseIndexerResponse
     {
@@ -43,17 +43,19 @@ namespace NzbDrone.Core.Indexers.Cardigann
             {
                 if (indexerResponse.HttpResponse.HasHttpRedirect)
                 {
-                    if (indexerResponse.HttpResponse.RedirectUrl.ContainsIgnoreCase("login.php"))
+                    _logger.Warn("Redirected to {0} from indexer request", indexerResponse.HttpResponse.RedirectUrl);
+
+                    if (indexerResponse.HttpResponse.RedirectUrl.ContainsIgnoreCase("/login.php"))
                     {
                         // Remove cookie cache
                         CookiesUpdater(null, null);
                         throw new IndexerException(indexerResponse, "We are being redirected to the login page. Most likely your session expired or was killed. Recheck your cookie or credentials and try testing the indexer.");
                     }
 
-                    throw new IndexerException(indexerResponse, $"Redirected to {indexerResponse.HttpResponse.RedirectUrl} from API request");
+                    throw new IndexerException(indexerResponse, $"Redirected to {indexerResponse.HttpResponse.RedirectUrl} from indexer request");
                 }
 
-                throw new IndexerException(indexerResponse, $"Unexpected response status {indexerResponse.HttpResponse.StatusCode} code from API request");
+                throw new IndexerException(indexerResponse, $"Unexpected response status {indexerResponse.HttpResponse.StatusCode} code from indexer request");
             }
 
             var results = indexerResponse.Content;
@@ -63,7 +65,7 @@ namespace NzbDrone.Core.Indexers.Cardigann
 
             var searchUrlUri = new Uri(request.Url.FullUri);
 
-            if (request.SearchPath.Response != null && request.SearchPath.Response.Type.Equals("json"))
+            if (request.SearchPath.Response is { Type: "json" })
             {
                 if (request.SearchPath.Response != null &&
                     request.SearchPath.Response.NoResultsMessage != null &&
@@ -72,7 +74,18 @@ namespace NzbDrone.Core.Indexers.Cardigann
                     return releases;
                 }
 
-                var parsedJson = JToken.Parse(results);
+                JToken parsedJson;
+
+                try
+                {
+                    parsedJson = JToken.Parse(results);
+                }
+                catch (JsonReaderException ex)
+                {
+                    _logger.Error(ex, "Unable to parse JSON response from indexer");
+
+                    throw new IndexerException(indexerResponse, "Error Parsing Json Response");
+                }
 
                 if (parsedJson == null)
                 {
@@ -81,23 +94,52 @@ namespace NzbDrone.Core.Indexers.Cardigann
 
                 if (search.Rows.Count != null)
                 {
-                    var countVal = HandleJsonSelector(search.Rows.Count, parsedJson, variables);
-
-                    if (int.TryParse(countVal, out var count) && count < 1)
+                    try
                     {
-                        return releases;
+                        var countVal = HandleJsonSelector(search.Rows.Count, parsedJson, variables);
+
+                        if (int.TryParse(countVal, out var count) && count < 1)
+                        {
+                            return releases;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Trace(ex, "Failed to parse JSON rows count.");
                     }
                 }
 
                 var rowsArray = JsonParseRowsSelector(parsedJson, search.Rows.Selector);
+
                 if (rowsArray == null)
                 {
+                    if (search.Rows.MissingAttributeEqualsNoResults)
+                    {
+                        return releases;
+                    }
+
                     throw new IndexerException(indexerResponse, "Error Parsing Rows Selector");
+                }
+
+                if (rowsArray.Count == 0)
+                {
+                    return releases;
                 }
 
                 foreach (var row in rowsArray)
                 {
-                    var selObj = search.Rows.Attribute != null ? row.SelectToken(search.Rows.Attribute).Value<JToken>() : row;
+                    var selObj = row;
+
+                    if (search.Rows.Attribute != null)
+                    {
+                        selObj = row.SelectToken(search.Rows.Attribute)?.Value<JToken>();
+
+                        if (selObj == null && search.Rows.MissingAttributeEqualsNoResults)
+                        {
+                            continue;
+                        }
+                    }
+
                     var mulRows = search.Rows.Multiple ? selObj.Values<JObject>() : new List<JObject> { selObj.Value<JObject>() };
 
                     foreach (var mulRow in mulRows)
@@ -117,6 +159,7 @@ namespace NzbDrone.Core.Indexers.Cardigann
                             string value = null;
                             var variablesKey = ".Result." + fieldName;
                             var isOptional = OptionalFields.Contains(field.Key) || fieldModifiers.Contains("optional") || field.Value.Optional;
+
                             try
                             {
                                 var parentObj = mulRow;
@@ -126,28 +169,35 @@ namespace NzbDrone.Core.Indexers.Cardigann
                                 }
 
                                 value = HandleJsonSelector(field.Value, parentObj, variables, !isOptional);
-                                if (isOptional && string.IsNullOrWhiteSpace(value))
+
+                                if (isOptional && value.IsNullOrWhiteSpace())
                                 {
-                                    variables[variablesKey] = null;
-                                    continue;
+                                    var defaultValue = ApplyGoTemplateText(field.Value.Default, variables);
+
+                                    if (defaultValue.IsNullOrWhiteSpace())
+                                    {
+                                        variables[variablesKey] = null;
+                                        continue;
+                                    }
+
+                                    value = defaultValue;
                                 }
 
                                 variables[variablesKey] = ParseFields(value, fieldName, release, fieldModifiers, searchUrlUri);
                             }
                             catch (Exception ex)
                             {
-                                if (!variables.ContainsKey(variablesKey))
+                                if (!variables.ContainsKey(variablesKey) || isOptional)
                                 {
                                     variables[variablesKey] = null;
                                 }
 
                                 if (isOptional)
                                 {
-                                    variables[variablesKey] = null;
                                     continue;
                                 }
 
-                                throw new CardigannException(string.Format("Error while parsing field={0}, selector={1}, value={2}: {3}", field.Key, field.Value.Selector, value ?? "<null>", ex.Message));
+                                throw new CardigannException($"Error while parsing field={field.Key}, selector={field.Value.Selector}, value={value ?? "<null>"}: {ex.Message}", ex);
                             }
                         }
 
@@ -248,34 +298,41 @@ namespace NzbDrone.Core.Indexers.Cardigann
                             string value = null;
                             var variablesKey = ".Result." + fieldName;
                             var isOptional = OptionalFields.Contains(field.Key) || fieldModifiers.Contains("optional") || field.Value.Optional;
+
                             try
                             {
                                 value = HandleSelector(field.Value, row, variables, !isOptional);
 
-                                if (isOptional && string.IsNullOrWhiteSpace(value))
+                                if (isOptional && value.IsNullOrWhiteSpace())
                                 {
-                                    variables[variablesKey] = null;
-                                    continue;
+                                    var defaultValue = ApplyGoTemplateText(field.Value.Default, variables);
+
+                                    if (defaultValue.IsNullOrWhiteSpace())
+                                    {
+                                        variables[variablesKey] = null;
+                                        continue;
+                                    }
+
+                                    value = defaultValue;
                                 }
 
                                 variables[variablesKey] = ParseFields(value, fieldName, release, fieldModifiers, searchUrlUri);
                             }
                             catch (Exception ex)
                             {
-                                if (!variables.ContainsKey(variablesKey))
+                                if (!variables.ContainsKey(variablesKey) || isOptional)
                                 {
                                     variables[variablesKey] = null;
                                 }
 
-                                if (OptionalFields.Contains(field.Key) || fieldModifiers.Contains("optional") || field.Value.Optional)
+                                if (isOptional)
                                 {
-                                    variables[variablesKey] = null;
                                     continue;
                                 }
 
                                 if (indexerLogging)
                                 {
-                                    _logger.Trace("Error while parsing field={0}, selector={1}, value={2}: {3}", field.Key, field.Value.Selector, value == null ? "<null>" : value, ex.Message);
+                                    _logger.Trace(ex, "Error while parsing field={0}, selector={1}, value={2}: {3}", field.Key, field.Value.Selector, value ?? "<null>", ex.Message);
                                 }
                             }
                         }

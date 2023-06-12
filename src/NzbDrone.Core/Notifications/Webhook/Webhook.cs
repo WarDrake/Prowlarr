@@ -10,8 +10,8 @@ namespace NzbDrone.Core.Notifications.Webhook
     {
         private readonly IWebhookProxy _proxy;
 
-        public Webhook(IWebhookProxy proxy, IConfigFileProvider configFileProvider)
-            : base(configFileProvider)
+        public Webhook(IWebhookProxy proxy, IConfigFileProvider configFileProvider, IConfigService configService)
+            : base(configFileProvider, configService)
         {
             _proxy = proxy;
         }
@@ -26,6 +26,11 @@ namespace NzbDrone.Core.Notifications.Webhook
         public override void OnHealthIssue(HealthCheck.HealthCheck healthCheck)
         {
             _proxy.SendWebhook(BuildHealthPayload(healthCheck), Settings);
+        }
+
+        public override void OnHealthRestored(HealthCheck.HealthCheck previousCheck)
+        {
+            _proxy.SendWebhook(BuildHealthRestoredPayload(previousCheck), Settings);
         }
 
         public override void OnApplicationUpdate(ApplicationUpdateMessage updateMessage)

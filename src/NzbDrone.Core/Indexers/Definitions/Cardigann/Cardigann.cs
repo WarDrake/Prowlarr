@@ -14,7 +14,7 @@ using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
 
-namespace NzbDrone.Core.Indexers.Cardigann
+namespace NzbDrone.Core.Indexers.Definitions.Cardigann
 {
     public class Cardigann : TorrentIndexerBase<CardigannSettings>
     {
@@ -165,6 +165,7 @@ namespace NzbDrone.Core.Indexers.Cardigann
                 SupportsRss = SupportsRss,
                 SupportsSearch = SupportsSearch,
                 SupportsRedirect = SupportsRedirect,
+                SupportsPagination = SupportsPagination,
                 Capabilities = new IndexerCapabilities(),
                 ExtraFields = settings
             };
